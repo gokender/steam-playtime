@@ -38,8 +38,36 @@ def test_closes_matching_appid_and_keeps_event_audit_trail(agent_config):
     ]
     assert read_rows(
         agent_config.db_file,
-        "SELECT event_type, appid, session_id IS NOT NULL FROM ingested_events ORDER BY id",
-    ) == [("START", "10", 1), ("START", "20", 1), ("STOP", "10", 1), ("STOP", "20", 1)]
+        "SELECT event_type, source_appid, appid, session_id IS NOT NULL FROM ingested_events ORDER BY id",
+    ) == [
+        ("START", "10", "10", 1),
+        ("START", "20", "20", 1),
+        ("STOP", "10", "10", 1),
+        ("STOP", "20", "20", 1),
+    ]
+
+
+def test_matches_a_non_steam_shortcut_start_to_its_signed_stop_appid(agent_config):
+    agent_config.log_file.write_text(
+        '[2026-08-04 14:45:58] AppID 14209595030481403904 adding PID 18837 as a tracked process '
+        '"/home/deck/.local/share/Steam/ubuntu12_32/reaper SteamLaunch AppId=3308429157 -- '
+        '\"/usr/bin/flatpak\" run org.libretro.RetroArch"\n'
+        '[2026-08-04 14:47:08] Remove -986538139 from running list\n'
+    )
+
+    read_logs(agent_config)
+
+    assert read_rows(
+        agent_config.db_file,
+        "SELECT appid, start_time, end_time, duration_seconds, status FROM sessions",
+    ) == [("3308429157", "2026-08-04 14:45:58", "2026-08-04 14:47:08", 70.0, "COMPLETED")]
+    assert read_rows(
+        agent_config.db_file,
+        "SELECT event_type, source_appid, appid FROM ingested_events ORDER BY id",
+    ) == [
+        ("START", "14209595030481403904", "3308429157"),
+        ("STOP", "-986538139", "3308429157"),
+    ]
 
 
 def test_defers_an_incomplete_final_line(agent_config):

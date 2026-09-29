@@ -17,7 +17,10 @@ Steam writes entries similar to the following in `gameprocess_log.txt`:
 ```
 
 The first entry creates a `RUNNING` session. The `Remove` entry closes the
-running session for the same AppID and records its duration.
+running session for the same AppID and records its duration. For non-Steam
+shortcuts, Steam can use a 64-bit process AppID at launch and a signed 32-bit
+AppID when removing it. The agent normalizes both values to the same canonical
+unsigned AppID while retaining each raw value in the event audit trail.
 
 The agent records the log inode and byte offset in SQLite. It supports log
 rotation and only processes complete lines. Updating an ingestion event and
@@ -138,20 +141,22 @@ default human-readable format uses aligned levels and stable event names:
 
 The database contains:
 
-- `sessions`: the AppID, original Steam command, start/end timestamps,
+- `sessions`: the canonical AppID used to pair start and stop events, original
+  Steam command, start/end timestamps,
   duration, and collection status (`RUNNING`, `COMPLETED`, or `SYNCED`);
-- `ingested_events`: the raw recognised Steam start/stop events, their source
-  inode and offset, and the affected session when one exists. This is an audit
-  trail for future parser and reconciliation improvements;
+- `ingested_events`: the raw recognized Steam start/stop events, their source
+  AppID, canonical AppID, inode and offset, and the affected session when one
+  exists. This is an audit trail for future parser and reconciliation
+  improvements;
 - `metadata`: the log inode and offset used for incremental reads.
 
 The agent deliberately stores the launch command now, including commands for
 non-Steam shortcuts, emulators, and ROM launchers. Future classification and
 cross-device reconciliation need these original local facts. A launch command
-can reveal local paths or usernames, so a future synchronisation client should
-not upload it unchanged without an explicit privacy policy and normalisation.
+can reveal local paths or usernames, so a future synchronization client should
+not upload it unchanged without an explicit privacy policy and normalization.
 
-`SYNCED` is reserved for the future server synchronisation workflow. The agent
+`SYNCED` is reserved for the future server synchronization workflow. The agent
 currently only creates `RUNNING` and `COMPLETED` sessions.
 
 ### Development schema

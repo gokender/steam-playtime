@@ -26,9 +26,18 @@ def record_event(conn: sqlite3.Connection, event: SteamEvent, inode: str, offset
     """Record a source event once and return its id, or None when already seen."""
     cursor = conn.execute(
         "INSERT OR IGNORE INTO ingested_events "
-        "(source_inode, source_offset, event_type, event_time, appid, launch_command, raw_line) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (inode, offset, event.event_type, event.event_time, event.appid, event.launch_command, event.raw_line),
+        "(source_inode, source_offset, event_type, event_time, source_appid, appid, launch_command, raw_line) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            inode,
+            offset,
+            event.event_type,
+            event.event_time,
+            event.source_appid,
+            event.appid,
+            event.launch_command,
+            event.raw_line,
+        ),
     )
     return cursor.lastrowid if cursor.rowcount else None
 

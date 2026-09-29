@@ -51,6 +51,7 @@ def init_db(db_file: Path) -> None:
                 source_offset INTEGER NOT NULL,
                 event_type TEXT CHECK(event_type IN ('START', 'STOP')) NOT NULL,
                 event_time TEXT NOT NULL,
+                source_appid TEXT NOT NULL,
                 appid TEXT NOT NULL,
                 launch_command TEXT,
                 raw_line TEXT NOT NULL,
