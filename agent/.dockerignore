@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+tests/
+agent.db
+uv.lock
+README.md
+pyproject.toml

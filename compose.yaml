@@ -1,0 +1,15 @@
+name: steam-playtime
+
+services:
+  agent:
+    build:
+      context: ./agent
+    restart: unless-stopped
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      CHECK_INTERVAL: "${CHECK_INTERVAL:-2}"
+      LOG_LEVEL: "${LOG_LEVEL:-INFO}"
+      TZ: "${TZ:-Europe/Paris}"
+    volumes:
+      - ${HOST_STEAM_LOG_DIR:?Set HOST_STEAM_LOG_DIR to Steam's logs directory}:/steam-logs:ro
+      - ${HOST_DATA_DIR:-./data}:/data

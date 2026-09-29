@@ -1,0 +1,10 @@
+.env
+.venv/
+agent/.venv/
+__pycache__/
+agent/__pycache__/
+*.py[cod]
+agent.db
+agent/agent.db
+data/
+.idea/
