@@ -1,0 +1,10 @@
+.git
+.idea
+.venv
+agent
+build
+dist
+__pycache__
+*.db
+*.db-shm
+*.db-wal
