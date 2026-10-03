@@ -31,6 +31,12 @@ on the device, and sends completed sessions to `server.url`. `server` exposes
 an authenticated HTTP API; `all` uses the generated local configuration for
 both roles.
 
+Synchronization acknowledgements are tracked per server identity. Changing
+`server.url` to a new server sends completed local sessions to that server once,
+without resending sessions already acknowledged by a previously used server.
+`all` exits before starting the agent if its local server port is unavailable;
+use `--port` to override it temporarily.
+
 `history` and `stats` render durations as `HH:MM:SS`. Daily reports use the
 configured timezone and split sessions that cross midnight, so each calendar
 day receives its correct share of playtime.

@@ -31,12 +31,28 @@ def create_agent_schema(connection: sqlite3.Connection) -> None:
             UNIQUE(source_inode, source_offset)
         );
         CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS sync_servers (
+            url TEXT PRIMARY KEY,
+            server_id TEXT,
+            failure_count INTEGER NOT NULL DEFAULT 0,
+            next_attempt_at TEXT,
+            last_error TEXT
+        );
+        CREATE TABLE IF NOT EXISTS session_sync (
+            session_uuid TEXT NOT NULL REFERENCES sessions(session_uuid),
+            server_id TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('PENDING', 'SYNCED')),
+            last_attempt_at TEXT,
+            synced_at TEXT,
+            PRIMARY KEY (session_uuid, server_id)
+        );
     """)
 
 
 def create_server_schema(connection: sqlite3.Connection) -> None:
     connection.executescript("""
         PRAGMA journal_mode = WAL;
+        CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS devices (
             device_id TEXT PRIMARY KEY,
             device_name TEXT NOT NULL UNIQUE,

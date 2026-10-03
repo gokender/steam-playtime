@@ -1,6 +1,7 @@
 """Persistence operations for the central server."""
 
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -18,6 +19,17 @@ def connection(db_path: Path):
         database.commit()
     finally:
         database.close()
+
+
+def server_id(db_path: Path) -> str:
+    """Return the immutable identity of this server database."""
+    with connection(db_path) as database:
+        row = database.execute("SELECT value FROM metadata WHERE key = 'server_id'").fetchone()
+        if row:
+            return row["value"]
+        value = str(uuid.uuid4())
+        database.execute("INSERT INTO metadata (key, value) VALUES ('server_id', ?)", (value,))
+        return value
 
 
 def save_sessions(db_path: Path, device_id: str, device_name: str, sessions: list[dict]) -> None:

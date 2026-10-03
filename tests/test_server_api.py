@@ -41,6 +41,10 @@ def test_sync_endpoint_requires_token_and_accepts_valid_payload(tmp_path):
     client = TestClient(create_app(settings(tmp_path)))
 
     assert client.post("/api/v1/sessions", json=payload()).status_code == 401
+    info = client.get("/api/v1/info", headers={"Authorization": "Bearer secret"})
+    assert info.status_code == 200
+    assert info.json()["server_id"]
+
     response = client.post("/api/v1/sessions", json=payload(), headers={"Authorization": "Bearer secret"})
 
     assert response.status_code == 200

@@ -1,6 +1,7 @@
 """Human-friendly command line interface."""
 
 import logging
+import socket
 import threading
 import time
 from dataclasses import replace
@@ -47,6 +48,8 @@ def settings() -> Settings:
 
 def configure_logging() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | %(message)s")
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 
 def run_agent(configuration: Settings, log_path: Path | None = None) -> None:
@@ -63,15 +66,28 @@ def run_agent(configuration: Settings, log_path: Path | None = None) -> None:
         typer.echo("Agent stopped.")
 
 
-def run_server(configuration: Settings) -> None:
+def bind_server_socket(configuration: Settings) -> socket.socket:
+    """Reserve the listening port before the agent is allowed to start."""
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind((configuration.server_host, configuration.server_port))
+    listener.listen(socket.SOMAXCONN)
+    listener.setblocking(False)
+    return listener
+
+
+def run_server(configuration: Settings, listener: socket.socket | None = None) -> None:
     typer.echo(f"server | started | http://{configuration.server_host}:{configuration.server_port}")
-    uvicorn.run(
-        create_app(configuration),
-        host=configuration.server_host,
-        port=configuration.server_port,
-        access_log=False,
-        log_level="warning",
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_app(configuration),
+            host=configuration.server_host,
+            port=configuration.server_port,
+            access_log=False,
+            log_level="warning",
+        )
     )
+    server.run(sockets=[listener] if listener else None)
 
 
 @app.command()
@@ -81,18 +97,36 @@ def agent(log_path: Path | None = typer.Option(None, help="Override the Steam ga
 
 
 @app.command()
-def server() -> None:
+def server(port: int | None = typer.Option(None, "--port", min=1, max=65535, help="Override the configured HTTP port.")) -> None:
     """Start the central local-network API server."""
-    run_server(settings())
+    configuration = settings()
+    if port is not None:
+        configuration = replace(configuration, server_port=port)
+    try:
+        listener = bind_server_socket(configuration)
+    except OSError as error:
+        typer.echo(f"server | failed | port={configuration.server_port} | error={error}", err=True)
+        raise typer.Exit(1) from error
+    run_server(configuration, listener)
 
 
 @app.command()
-def all(log_path: Path | None = typer.Option(None, help="Override the Steam gameprocess_log.txt path.")) -> None:
+def all(
+    log_path: Path | None = typer.Option(None, help="Override the Steam gameprocess_log.txt path."),
+    port: int | None = typer.Option(None, "--port", min=1, max=65535, help="Override the local server HTTP port."),
+) -> None:
     """Run the local server and collector together."""
     configuration = settings()
-    local_url = configuration.server_url or f"http://127.0.0.1:{configuration.server_port}"
+    if port is not None:
+        configuration = replace(configuration, server_port=port)
+    local_url = f"http://127.0.0.1:{configuration.server_port}"
     configuration = replace(configuration, server_url=local_url)
-    thread = threading.Thread(target=run_server, args=(configuration,), daemon=True)
+    try:
+        listener = bind_server_socket(configuration)
+    except OSError as error:
+        typer.echo(f"server | failed | port={configuration.server_port} | error={error}", err=True)
+        raise typer.Exit(1) from error
+    thread = threading.Thread(target=run_server, args=(configuration, listener), daemon=True)
     thread.start()
     run_agent(configuration, log_path)
 

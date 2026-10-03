@@ -40,6 +40,10 @@ def create_app(settings: Settings) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/api/v1/info", dependencies=[Depends(require_token)])
+    def info() -> dict[str, str]:
+        return {"server_id": storage.server_id(settings.server_db), "version": __version__}
+
     @app.post("/api/v1/sessions", dependencies=[Depends(require_token)])
     def ingest(payload: SyncPayload, background_tasks: BackgroundTasks) -> dict[str, int | str]:
         sessions = [session.model_dump() for session in payload.sessions]

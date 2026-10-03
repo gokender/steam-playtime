@@ -3,6 +3,7 @@
 import sqlite3
 import uuid
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from steam_playtime.storage.schema import create_agent_schema
@@ -33,19 +34,71 @@ def set_metadata(database: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
-def pending_sessions(db_path: Path, batch_size: int = 100) -> list[dict]:
+def server_is_ready(db_path: Path, url: str, now: datetime) -> bool:
+    with connection(db_path) as database:
+        row = database.execute(
+            "SELECT next_attempt_at FROM sync_servers WHERE url = ?",
+            (url,),
+        ).fetchone()
+    if row is None or row["next_attempt_at"] is None:
+        return True
+    return datetime.fromisoformat(row["next_attempt_at"].replace("Z", "+00:00")) <= now
+
+
+def server_id(db_path: Path, url: str) -> str | None:
+    with connection(db_path) as database:
+        row = database.execute("SELECT server_id FROM sync_servers WHERE url = ?", (url,)).fetchone()
+    return row["server_id"] if row else None
+
+
+def register_server(db_path: Path, url: str, server_id: str) -> None:
+    with connection(db_path) as database:
+        database.execute(
+            "INSERT INTO sync_servers (url, server_id, failure_count, next_attempt_at, last_error) VALUES (?, ?, 0, NULL, NULL) "
+            "ON CONFLICT(url) DO UPDATE SET server_id = excluded.server_id, failure_count = 0, "
+            "next_attempt_at = NULL, last_error = NULL",
+            (url, server_id),
+        )
+
+
+def record_server_failure(db_path: Path, url: str, error: str, now: datetime) -> None:
+    with connection(db_path) as database:
+        row = database.execute("SELECT failure_count FROM sync_servers WHERE url = ?", (url,)).fetchone()
+        failures = (row["failure_count"] if row else 0) + 1
+        delay_seconds = min(60 * 2 ** (failures - 1), 3600)
+        next_attempt = now + timedelta(seconds=delay_seconds)
+        database.execute(
+            "INSERT INTO sync_servers (url, failure_count, next_attempt_at, last_error) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(url) DO UPDATE SET failure_count = excluded.failure_count, "
+            "next_attempt_at = excluded.next_attempt_at, last_error = excluded.last_error",
+            (url, failures, next_attempt.isoformat().replace("+00:00", "Z"), error),
+        )
+
+
+def pending_sessions(db_path: Path, server_id: str, batch_size: int = 100) -> list[dict]:
     with connection(db_path) as database:
         rows = database.execute(
-            "SELECT session_uuid, appid, game_name, launch_kind, title_source, launch_target, start_time, end_time, "
-            "duration_seconds FROM sessions WHERE status = 'PENDING' ORDER BY id LIMIT ?",
-            (batch_size,),
+            "SELECT s.session_uuid, s.appid, s.game_name, s.launch_kind, s.title_source, s.launch_target, "
+            "s.start_time, s.end_time, s.duration_seconds FROM sessions s LEFT JOIN session_sync sync "
+            "ON sync.session_uuid = s.session_uuid AND sync.server_id = ? "
+            "WHERE s.end_time IS NOT NULL AND s.session_uuid IS NOT NULL "
+            "AND (sync.status IS NULL OR sync.status != 'SYNCED') ORDER BY s.id LIMIT ?",
+            (server_id, batch_size),
         ).fetchall()
     return [dict(row) for row in rows]
 
 
-def mark_synced(db_path: Path, session_uuids: list[str]) -> None:
+def mark_synced(db_path: Path, server_id: str, session_uuids: list[str], now: datetime) -> None:
     with connection(db_path) as database:
-        database.executemany("UPDATE sessions SET status = 'SYNCED' WHERE session_uuid = ?", [(value,) for value in session_uuids])
+        database.executemany(
+            "INSERT INTO session_sync (session_uuid, server_id, status, last_attempt_at, synced_at) VALUES (?, ?, 'SYNCED', ?, ?) "
+            "ON CONFLICT(session_uuid, server_id) DO UPDATE SET status = 'SYNCED', "
+            "last_attempt_at = excluded.last_attempt_at, synced_at = excluded.synced_at",
+            [
+                (value, server_id, now.isoformat().replace("+00:00", "Z"), now.isoformat().replace("+00:00", "Z"))
+                for value in session_uuids
+            ],
+        )
 
 
 def close_running_session(database: sqlite3.Connection, session: sqlite3.Row, end_time: str) -> float:
