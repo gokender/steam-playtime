@@ -23,6 +23,14 @@ The version comes from `src/steam_playtime/__init__.py`. Use the versioned
 directory for immediate local testing. The `.tar.gz` archive is the portable
 Linux x86_64 package.
 
+Previous versioned packages are preserved. The script refuses to replace an
+existing version; bump the application version before a new release, or use
+`--force` only when intentionally rebuilding the same version:
+
+```bash
+./scripts/package-linux-x86_64.sh --force
+```
+
 This image builds a PyInstaller directory package on Debian Bookworm (glibc
 2.36), which is compatible with Steam Deck's glibc 2.41. It is intentionally a
 manual workflow: it does not publish releases or run CI jobs.

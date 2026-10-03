@@ -102,3 +102,8 @@ using Python 3.13 on Debian Bookworm, suitable for testing on Steam Deck.
 ```bash
 uv run pytest
 ```
+
+## Future features
+
+Planned work, including historical Steam log import and a simple statistics web
+page, is documented in [docs/future-features.md](docs/future-features.md).
