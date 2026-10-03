@@ -5,6 +5,7 @@ from typing import Literal
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
+from steam_playtime import __version__
 from steam_playtime.config import Settings
 from steam_playtime.steam.catalog import resolve_app
 from steam_playtime.storage import server as storage
@@ -29,7 +30,7 @@ class SyncPayload(BaseModel):
 
 
 def create_app(settings: Settings) -> FastAPI:
-    app = FastAPI(title="Steam Playtime", version="0.2.0")
+    app = FastAPI(title="Steam Playtime", version=__version__)
 
     def require_token(authorization: str | None = Header(default=None)) -> None:
         if authorization != f"Bearer {settings.api_token}":

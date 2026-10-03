@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 import uvicorn
 
+from steam_playtime import __version__
 from steam_playtime.agent.collector import collect_once
 from steam_playtime.agent.sync import sync_once
 from steam_playtime.config import Settings, config_path, load_settings
@@ -17,7 +18,21 @@ from steam_playtime.server.app import create_app
 from steam_playtime.storage import agent as agent_storage
 from steam_playtime.storage import server as server_storage
 
-app = typer.Typer(no_args_is_help=True, help="Local-first Steam playtime tracking.")
+app = typer.Typer(
+    invoke_without_command=True,
+    no_args_is_help=True,
+    help="Local-first Steam playtime tracking.",
+)
+
+
+@app.callback()
+def root(
+    version: bool = typer.Option(False, "--version", help="Show the installed version and exit."),
+) -> None:
+    """Steam Playtime command line interface."""
+    if version:
+        typer.echo(f"steam-playtime {__version__}")
+        raise typer.Exit()
 
 
 def settings() -> Settings:

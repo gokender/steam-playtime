@@ -1,9 +1,9 @@
 [project]
 name = "steam-playtime"
-version = "0.2.0"
+dynamic = ["version"]
 description = "Local-first Steam playtime tracking"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.115",
     "httpx>=0.28",
@@ -15,6 +15,9 @@ dependencies = [
 [project.scripts]
 steam-playtime = "steam_playtime.cli:main"
 
+[project.optional-dependencies]
+build = ["pyinstaller>=6.11,<7"]
+
 [dependency-groups]
 dev = ["pytest>=9.0"]
 
@@ -24,6 +27,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.dynamic]
+version = {attr = "steam_playtime.__version__"}
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

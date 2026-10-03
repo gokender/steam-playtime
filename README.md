@@ -81,6 +81,16 @@ The optional collector profile is for development:
 docker compose --profile agent up --build agent
 ```
 
+## Manual Linux / Steam Deck package
+
+A reproducible manual PyInstaller build environment is available in
+[`packaging/`](packaging/README.md). It builds a Linux x86_64 directory package
+using Python 3.13 on Debian Bookworm, suitable for testing on Steam Deck.
+
+```bash
+./scripts/package-linux-x86_64.sh
+```
+
 ## Development
 
 ```bash

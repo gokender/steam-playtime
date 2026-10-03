@@ -13,3 +13,4 @@ server-data/
 *.egg-info/
 build/
 dist/
+*.spec

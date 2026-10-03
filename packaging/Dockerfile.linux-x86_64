@@ -1,0 +1,16 @@
+FROM python:3.13-slim-bookworm
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y \
+        binutils \
+        build-essential \
+        file \
+        patchelf \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+CMD ["bash"]
