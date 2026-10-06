@@ -42,15 +42,15 @@ From the repository root:
 ```bash
 docker build \
   --file packaging/Dockerfile.linux-x86_64 \
-  --tag steam-playtime-builder:python3.13 \
+  --tag steam-playtime-builder:python3.11 \
   .
 ```
 
 Check the build environment if desired:
 
 ```bash
-docker run --rm steam-playtime-builder:python3.13 python --version
-docker run --rm steam-playtime-builder:python3.13 ldd --version
+docker run --rm steam-playtime-builder:python3.11 python --version
+docker run --rm steam-playtime-builder:python3.11 ldd --version
 ```
 
 ## Build and test the package
@@ -64,7 +64,7 @@ docker run --rm --interactive --tty \
   --env HOME=/tmp \
   --volume "$PWD:/workspace" \
   --workdir /workspace \
-  steam-playtime-builder:python3.13
+  steam-playtime-builder:python3.11
 ```
 
 Inside the container:
@@ -95,3 +95,9 @@ dist/steam-playtime/steam-playtime status
 
 Copy the complete `dist/steam-playtime/` directory to the Steam Deck. The
 target does not need Python, pip, or uv to run the packaged executable.
+
+## GitHub Actions
+
+The `Package Linux` workflow runs this same script for tags matching `v*` and
+when started manually. It uploads the archive and checksum files as workflow
+artifacts; it does not create or modify Git tags or GitHub Releases.
