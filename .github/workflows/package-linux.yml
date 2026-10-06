@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   package:
@@ -16,6 +16,15 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Verify tag matches package version
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        run: |
+          expected_tag="v$(PYTHONPATH=src python -c 'from steam_playtime import __version__; print(__version__)')"
+          if [ "$GITHUB_REF_NAME" != "$expected_tag" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match package version $expected_tag." >&2
+            exit 1
+          fi
 
       - name: Build and test Linux package
         run: ./scripts/package-linux-x86_64.sh
@@ -29,3 +38,15 @@ jobs:
             dist/*.sha256
             dist/SHA256SUMS
           if-no-files-found: error
+
+      - name: Create GitHub Release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=(dist/*.tar.gz dist/*.sha256 dist/SHA256SUMS)
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes
+          fi

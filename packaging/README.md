@@ -98,6 +98,7 @@ target does not need Python, pip, or uv to run the packaged executable.
 
 ## GitHub Actions
 
-The `Package Linux` workflow runs this same script for tags matching `v*` and
-when started manually. It uploads the archive and checksum files as workflow
-artifacts; it does not create or modify Git tags or GitHub Releases.
+The `Package Linux` workflow can be started manually to build an artifact
+without creating a release. A pushed `v*` tag runs the same build, verifies
+that the tag matches the package version, then creates or updates the GitHub
+Release with the archive and checksums. The workflow never creates Git tags.
