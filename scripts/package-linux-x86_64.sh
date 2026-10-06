@@ -45,11 +45,11 @@ docker run --rm \
 
     rm -rf build steam-playtime.spec dist/steam-playtime
 
-    python -m venv /tmp/steam-playtime-build
-    source /tmp/steam-playtime-build/bin/activate
+    python -m venv /tmp/steam-playtime-test
+    source /tmp/steam-playtime-test/bin/activate
 
     python -m pip install --upgrade pip
-    python -m pip install ".[build]" pytest
+    python -m pip install ".[build]" pytest httpx2
 
     INSTALLED_VERSION="$(python -c "from steam_playtime import __version__; print(__version__)")"
     if [[ "$INSTALLED_VERSION" != "$VERSION" ]]; then
@@ -70,7 +70,11 @@ docker run --rm \
 
     pytest
 
-    pyinstaller \
+    /usr/local/bin/python -m venv /tmp/steam-playtime-build
+    /tmp/steam-playtime-build/bin/python -m pip install --upgrade pip
+    /tmp/steam-playtime-build/bin/python -m pip install ".[build]"
+
+    /tmp/steam-playtime-build/bin/pyinstaller \
       --clean \
       --noconfirm \
       --onedir \
