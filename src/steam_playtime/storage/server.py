@@ -93,10 +93,12 @@ def statistics(db_path: Path) -> list[sqlite3.Row]:
 
 
 def sessions_for_reporting(db_path: Path) -> list[sqlite3.Row]:
-    """Read the resolved names and UTC intervals needed for daily reports."""
+    """Read resolved names, devices, and UTC intervals for daily reports."""
     with connection(db_path) as database:
         return database.execute(
-            "SELECT s.start_time, s.end_time, COALESCE(a.name, s.game_name_snapshot) AS game_name "
-            "FROM sessions s LEFT JOIN steam_apps a ON a.appid = CAST(s.appid AS INTEGER) "
+            "SELECT s.start_time, s.end_time, d.device_name, "
+            "COALESCE(a.name, s.game_name_snapshot) AS game_name "
+            "FROM sessions s JOIN devices d ON d.device_id = s.device_id "
+            "LEFT JOIN steam_apps a ON a.appid = CAST(s.appid AS INTEGER) "
             "ORDER BY s.start_time DESC"
         ).fetchall()

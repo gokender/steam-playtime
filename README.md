@@ -26,6 +26,7 @@ uv run steam-playtime history
 uv run steam-playtime stats
 uv run steam-playtime stats --daily
 uv run steam-playtime stats --game "Hades"
+uv run steam-playtime stats --csv playtime.csv
 ```
 
 `agent` reads the local `gameprocess_log.txt`, stores raw launch commands only
@@ -42,6 +43,12 @@ use `--port` to override it temporarily.
 `history` and `stats` render durations as `HH:MM:SS`. Daily reports use the
 configured timezone and split sessions that cross midnight, so each calendar
 day receives its correct share of playtime.
+
+`stats --csv FILE` exports one row per local calendar day, game, and device.
+The CSV columns are `day`, `game_name`, `device_name`, `duration_seconds`, and
+`duration`; `duration` uses `HH:MM:SS`, including total hours above 24. Game
+and device names are correctly CSV-escaped, including commas and quotes.
+Use `--game "NAME"` with `--csv` to export one game only.
 
 ## Configuration
 
