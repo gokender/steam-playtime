@@ -6,6 +6,8 @@ SQLite database while the server is unavailable and synchronizes later.
 
 ## Install and run
 
+Steam Playtime requires Python 3.11 or newer.
+
 ```bash
 uv sync --group dev
 uv run steam-playtime --help
@@ -91,7 +93,7 @@ docker compose --profile agent up --build agent
 
 A reproducible manual PyInstaller build environment is available in
 [`packaging/`](packaging/README.md). It builds a Linux x86_64 directory package
-using Python 3.13 on Debian Bookworm, suitable for testing on Steam Deck.
+using Python 3.11 on Debian Bookworm, suitable for testing on Steam Deck.
 
 ```bash
 ./scripts/package-linux-x86_64.sh

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE_NAME="steam-playtime-builder:python3.13"
+IMAGE_NAME="steam-playtime-builder:python3.11"
 FORCE=false
 
 if [[ "${1:-}" == "--force" ]]; then
