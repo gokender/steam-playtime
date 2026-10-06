@@ -14,7 +14,7 @@ from steam_playtime import __version__
 from steam_playtime.agent.collector import collect_once
 from steam_playtime.agent.sync import sync_once
 from steam_playtime.config import Settings, config_path, load_settings
-from steam_playtime.reporting import daily_totals, format_duration
+from steam_playtime.reporting import daily_game_device_totals, daily_totals, format_duration, write_daily_game_device_csv
 from steam_playtime.server.app import create_app
 from steam_playtime.storage import agent as agent_storage
 from steam_playtime.storage import server as server_storage
@@ -162,9 +162,17 @@ def history(limit: int = typer.Option(20, min=1, help="Maximum number of session
 def stats(
     daily: bool = typer.Option(False, "--daily", help="Group playtime by local calendar day."),
     game: str | None = typer.Option(None, "--game", help="Show daily sessions for one game."),
+    csv: Path | None = typer.Option(None, "--csv", help="Export daily game and device totals to a CSV file."),
 ) -> None:
     """Show consolidated playtime totals from the local server database."""
     configuration = settings()
+    if csv is not None:
+        totals = daily_game_device_totals(
+            server_storage.sessions_for_reporting(configuration.server_db), configuration.timezone, game
+        )
+        write_daily_game_device_csv(csv, totals)
+        typer.echo(f"Exported {len(totals)} row(s) to {csv}.")
+        return
     if daily or game:
         totals = daily_totals(server_storage.sessions_for_reporting(configuration.server_db), configuration.timezone, game)
         if not totals:

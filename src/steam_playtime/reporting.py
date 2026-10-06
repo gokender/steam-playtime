@@ -1,7 +1,9 @@
 """Human-readable server reports with timezone-aware daily totals."""
 
+import csv
 from collections import defaultdict
 from datetime import UTC, datetime, time, timedelta
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 
@@ -49,3 +51,42 @@ def daily_totals(rows, timezone: str, game_name: str | None = None) -> dict[str,
                 }
             )
     return dict(totals)
+
+
+def daily_game_device_totals(rows, timezone: str, game_name: str | None = None) -> list[dict]:
+    """Aggregate sessions by local day, resolved game name, and device name."""
+    totals: dict[tuple[str, str, str], float] = defaultdict(float)
+    for row in rows:
+        if game_name and row["game_name"].casefold() != game_name.casefold():
+            continue
+        for day, duration, _, _ in split_session_by_day(row["start_time"], row["end_time"], timezone):
+            totals[(day, row["game_name"], row["device_name"])] += duration
+
+    return [
+        {
+            "day": day,
+            "game_name": name,
+            "device_name": device,
+            "duration_seconds": duration,
+            "duration": format_duration(duration),
+        }
+        for (day, name, device), duration in sorted(totals.items())
+    ]
+
+
+def write_daily_game_device_csv(path: Path, totals: list[dict]) -> None:
+    """Write daily game/device totals as an RFC 4180-compatible CSV file."""
+    with path.open("w", newline="", encoding="utf-8") as output:
+        writer = csv.DictWriter(
+            output,
+            fieldnames=["day", "game_name", "device_name", "duration_seconds", "duration"],
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        for total in totals:
+            writer.writerow(
+                {
+                    **total,
+                    "duration_seconds": f"{total['duration_seconds']:g}",
+                }
+            )

@@ -51,3 +51,13 @@ def test_catalog_resolution_updates_fallback_session_snapshots(tmp_path):
     with sqlite3.connect(database) as connection:
         row = connection.execute("SELECT game_name_snapshot, launch_kind, title_source FROM sessions").fetchone()
     assert row == ("Resolved Game", "STEAM_APP", "SERVER_CATALOG")
+
+
+def test_reporting_sessions_include_device_name(tmp_path):
+    database = tmp_path / "server.db"
+    server.save_sessions(database, "device-1", "Steam Deck", [session()])
+
+    rows = server.sessions_for_reporting(database)
+
+    assert rows[0]["game_name"] == "Example Game"
+    assert rows[0]["device_name"] == "Steam Deck"
