@@ -20,6 +20,7 @@ def sync_once(settings: Settings, now: datetime | None = None) -> int:
     if not storage.server_is_ready(settings.agent_db, settings.server_url, current_time):
         return 0
 
+    sessions: list[dict] = []
     try:
         with httpx.Client(timeout=10) as client:
             headers = {"Authorization": f"Bearer {settings.api_token}"}
@@ -30,6 +31,7 @@ def sync_once(settings: Settings, now: datetime | None = None) -> int:
 
             sessions = storage.pending_sessions(settings.agent_db, configured_server_id)
             if not sessions:
+                storage.record_sync_result(settings.agent_db, settings.server_url, "SUCCESS", current_time, 0)
                 return 0
 
             response = client.post(
@@ -46,13 +48,16 @@ def sync_once(settings: Settings, now: datetime | None = None) -> int:
                 raise ValueError("Server did not acknowledge every session.")
     except httpx.HTTPStatusError as error:
         storage.suspend_server(settings.agent_db, settings.server_url, str(error), current_time)
+        storage.record_sync_result(settings.agent_db, settings.server_url, "FAILED", current_time, len(sessions), str(error))
         logger.warning("agent | synchronization_suspended | error=%s", error)
         return 0
     except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
         storage.record_server_failure(settings.agent_db, settings.server_url, str(error), current_time)
+        storage.record_sync_result(settings.agent_db, settings.server_url, "FAILED", current_time, len(sessions), str(error))
         logger.warning("agent | synchronization_deferred | error=%s", error)
         return 0
 
     storage.mark_synced(settings.agent_db, configured_server_id, [session["session_uuid"] for session in sessions], current_time)
+    storage.record_sync_result(settings.agent_db, settings.server_url, "SUCCESS", current_time, len(sessions))
     logger.info("agent | synchronized | server_id=%s sessions=%s", configured_server_id, len(sessions))
     return len(sessions)

@@ -43,6 +43,13 @@ def create_agent_schema(connection: sqlite3.Connection) -> None:
             suspended_at TEXT NOT NULL,
             error TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS sync_server_results (
+            url TEXT PRIMARY KEY,
+            result TEXT NOT NULL CHECK (result IN ('SUCCESS', 'FAILED')),
+            attempted_at TEXT NOT NULL,
+            session_count INTEGER NOT NULL,
+            error TEXT
+        );
         CREATE TABLE IF NOT EXISTS session_sync (
             session_uuid TEXT NOT NULL REFERENCES sessions(session_uuid),
             server_id TEXT NOT NULL,

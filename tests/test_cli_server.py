@@ -53,10 +53,43 @@ def test_status_shows_suspended_sync_and_reset_command(tmp_path, monkeypatch):
 
     status = runner.invoke(cli.app, ["status"])
     assert status.exit_code == 0
+    assert "Current game: none" in status.output
+    assert "Agent: never started" in status.output
+    assert "Pending sessions: 0" in status.output
     assert "Synchronization: suspended" in status.output
     assert "sync reset" in status.output
+    assert "Last synchronization: never" in status.output
 
     reset = runner.invoke(cli.app, ["sync", "reset"])
     assert reset.exit_code == 0
     assert "Synchronization reset" in reset.output
     assert agent_storage.server_is_ready(configuration.agent_db, configuration.server_url, datetime.now(UTC))
+
+
+def test_status_uses_active_local_server_when_no_url_is_configured(tmp_path, monkeypatch):
+    configuration = Settings(
+        config_file=tmp_path / "config.toml",
+        data_dir=tmp_path,
+        device_id="device",
+        device_name="device",
+        check_interval_seconds=2,
+        timezone="UTC",
+        server_url="",
+        server_host="127.0.0.1",
+        server_port=8080,
+        api_token="token",
+    )
+    from datetime import UTC, datetime
+
+    agent_storage.record_agent_heartbeat(
+        configuration.agent_db, datetime.now(UTC), "http://127.0.0.1:8080"
+    )
+    monkeypatch.setattr(cli, "settings", lambda: configuration)
+
+    result = CliRunner().invoke(cli.app, ["status"])
+
+    assert result.exit_code == 0
+    assert "Agent: running" in result.output
+    assert "Pending sessions: 0" in result.output
+    assert "Synchronization: ready" in result.output
+    assert "Last synchronization: never" in result.output
