@@ -36,6 +36,12 @@ def set_metadata(database: sqlite3.Connection, key: str, value: str) -> None:
 
 def server_is_ready(db_path: Path, url: str, now: datetime) -> bool:
     with connection(db_path) as database:
+        suspended = database.execute(
+            "SELECT 1 FROM sync_server_suspensions WHERE url = ?",
+            (url,),
+        ).fetchone()
+        if suspended is not None:
+            return False
         row = database.execute(
             "SELECT next_attempt_at FROM sync_servers WHERE url = ?",
             (url,),
@@ -59,6 +65,7 @@ def register_server(db_path: Path, url: str, server_id: str) -> None:
             "next_attempt_at = NULL, last_error = NULL",
             (url, server_id),
         )
+        database.execute("DELETE FROM sync_server_suspensions WHERE url = ?", (url,))
 
 
 def record_server_failure(db_path: Path, url: str, error: str, now: datetime) -> None:
@@ -73,6 +80,56 @@ def record_server_failure(db_path: Path, url: str, error: str, now: datetime) ->
             "next_attempt_at = excluded.next_attempt_at, last_error = excluded.last_error",
             (url, failures, next_attempt.isoformat().replace("+00:00", "Z"), error),
         )
+
+
+def suspend_server(db_path: Path, url: str, error: str, now: datetime) -> None:
+    """Stop automatic retries after the server returned an HTTP error."""
+    with connection(db_path) as database:
+        row = database.execute("SELECT failure_count FROM sync_servers WHERE url = ?", (url,)).fetchone()
+        failures = (row["failure_count"] if row else 0) + 1
+        timestamp = now.isoformat().replace("+00:00", "Z")
+        database.execute(
+            "INSERT INTO sync_servers (url, failure_count, next_attempt_at, last_error) VALUES (?, ?, NULL, ?) "
+            "ON CONFLICT(url) DO UPDATE SET failure_count = excluded.failure_count, "
+            "next_attempt_at = NULL, last_error = excluded.last_error",
+            (url, failures, error),
+        )
+        database.execute(
+            "INSERT INTO sync_server_suspensions (url, suspended_at, error) VALUES (?, ?, ?) "
+            "ON CONFLICT(url) DO UPDATE SET suspended_at = excluded.suspended_at, error = excluded.error",
+            (url, timestamp, error),
+        )
+
+
+def reset_server_sync(db_path: Path, url: str) -> bool:
+    """Clear retry and suspension state for one configured server."""
+    with connection(db_path) as database:
+        known = database.execute("SELECT 1 FROM sync_servers WHERE url = ?", (url,)).fetchone() is not None
+        database.execute("DELETE FROM sync_server_suspensions WHERE url = ?", (url,))
+        database.execute(
+            "UPDATE sync_servers SET failure_count = 0, next_attempt_at = NULL, last_error = NULL WHERE url = ?",
+            (url,),
+        )
+    return known
+
+
+def server_sync_status(db_path: Path, url: str) -> dict[str, str | int | bool | None]:
+    """Return persisted retry information for display by the CLI."""
+    with connection(db_path) as database:
+        row = database.execute(
+            "SELECT s.failure_count, s.next_attempt_at, s.last_error, p.suspended_at "
+            "FROM sync_servers s LEFT JOIN sync_server_suspensions p ON p.url = s.url WHERE s.url = ?",
+            (url,),
+        ).fetchone()
+    if row is None:
+        return {"known": False, "suspended": False, "failure_count": 0, "next_attempt_at": None, "last_error": None}
+    return {
+        "known": True,
+        "suspended": row["suspended_at"] is not None,
+        "failure_count": row["failure_count"],
+        "next_attempt_at": row["next_attempt_at"],
+        "last_error": row["last_error"],
+    }
 
 
 def pending_sessions(db_path: Path, server_id: str, batch_size: int = 100) -> list[dict]:

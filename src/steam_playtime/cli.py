@@ -24,6 +24,8 @@ app = typer.Typer(
     no_args_is_help=True,
     help="Local-first Steam playtime tracking.",
 )
+sync_app = typer.Typer(help="Manage agent synchronization.")
+app.add_typer(sync_app, name="sync")
 
 
 @app.callback()
@@ -133,7 +135,7 @@ def all(
 
 @app.command()
 def status() -> None:
-    """Show the active local session."""
+    """Show the active local session and synchronization state."""
     configuration = settings()
     with agent_storage.connection(configuration.agent_db) as database:
         session = database.execute(
@@ -143,6 +145,37 @@ def status() -> None:
         typer.echo("No active local session.")
     else:
         typer.echo(f"{session['game_name']} — started {session['start_time']}")
+    show_sync_status(configuration)
+
+
+def show_sync_status(configuration: Settings) -> None:
+    if not configuration.server_url:
+        typer.echo("Synchronization: not configured.")
+        return
+    state = agent_storage.server_sync_status(configuration.agent_db, configuration.server_url)
+    if state["suspended"]:
+        typer.echo(
+            f"Synchronization: suspended | failures={state['failure_count']} | error={state['last_error']} | "
+            "run 'steam-playtime sync reset' after correcting the configuration or server."
+        )
+    elif state["next_attempt_at"]:
+        typer.echo(
+            f"Synchronization: retry at {state['next_attempt_at']} | failures={state['failure_count']} | "
+            f"error={state['last_error']}"
+        )
+    else:
+        typer.echo(f"Synchronization: ready | failures={state['failure_count']}")
+
+
+@sync_app.command("reset")
+def reset_sync() -> None:
+    """Resume synchronization after an HTTP error."""
+    configuration = settings()
+    if not configuration.server_url:
+        typer.echo("Synchronization is not configured.", err=True)
+        raise typer.Exit(1)
+    agent_storage.reset_server_sync(configuration.agent_db, configuration.server_url)
+    typer.echo(f"Synchronization reset for {configuration.server_url}.")
 
 
 @app.command()
