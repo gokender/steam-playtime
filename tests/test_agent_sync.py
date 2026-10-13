@@ -76,7 +76,38 @@ def test_http_error_suspends_server_until_reset(tmp_path, monkeypatch):
     assert state["suspended"]
     assert state["failure_count"] == 1
     assert not storage.server_is_ready(configuration.agent_db, "http://server", now)
+    assert storage.last_sync_result(configuration.agent_db, "http://server") == {
+        "result": "FAILED",
+        "attempted_at": "2026-01-01T00:00:00Z",
+        "session_count": 0,
+        "error": "server error",
+    }
 
     assert storage.reset_server_sync(configuration.agent_db, "http://server")
     assert storage.server_is_ready(configuration.agent_db, "http://server", now)
     assert storage.server_sync_status(configuration.agent_db, "http://server")["failure_count"] == 0
+
+
+def test_operational_state_is_persisted_per_configured_server(tmp_path):
+    db_path = tmp_path / "agent.db"
+    now = datetime(2026, 1, 1, tzinfo=UTC)
+    with storage.connection(db_path) as database:
+        database.execute(
+            "INSERT INTO sessions (session_uuid, device_id, appid, launch_command, game_name, launch_kind, "
+            "title_source, start_time, end_time, duration_seconds, status) "
+            "VALUES ('session-1', 'device-1', '42', '', 'Example', 'UNKNOWN', 'FALLBACK', ?, ?, 60, 'PENDING')",
+            ("2026-01-01T10:00:00Z", "2026-01-01T10:01:00Z"),
+        )
+
+    storage.record_agent_heartbeat(db_path, now, "http://server")
+    storage.record_sync_result(db_path, "http://server", "SUCCESS", now, 0)
+
+    assert storage.agent_heartbeat(db_path) == "2026-01-01T00:00:00Z"
+    assert storage.active_server_url(db_path) == "http://server"
+    assert storage.pending_session_count(db_path, None) == 1
+    assert storage.last_sync_result(db_path, "http://server") == {
+        "result": "SUCCESS",
+        "attempted_at": "2026-01-01T00:00:00Z",
+        "session_count": 0,
+        "error": None,
+    }

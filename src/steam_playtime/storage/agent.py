@@ -34,6 +34,22 @@ def set_metadata(database: sqlite3.Connection, key: str, value: str) -> None:
     )
 
 
+def record_agent_heartbeat(db_path: Path, now: datetime, server_url: str = "") -> None:
+    with connection(db_path) as database:
+        set_metadata(database, "agent_heartbeat_at", now.isoformat().replace("+00:00", "Z"))
+        set_metadata(database, "agent_server_url", server_url)
+
+
+def agent_heartbeat(db_path: Path) -> str | None:
+    with connection(db_path) as database:
+        return metadata(database, "agent_heartbeat_at")
+
+
+def active_server_url(db_path: Path) -> str:
+    with connection(db_path) as database:
+        return metadata(database, "agent_server_url") or ""
+
+
 def server_is_ready(db_path: Path, url: str, now: datetime) -> bool:
     with connection(db_path) as database:
         suspended = database.execute(
@@ -132,6 +148,27 @@ def server_sync_status(db_path: Path, url: str) -> dict[str, str | int | bool | 
     }
 
 
+def record_sync_result(
+    db_path: Path, url: str, result: str, now: datetime, session_count: int, error: str | None = None
+) -> None:
+    with connection(db_path) as database:
+        database.execute(
+            "INSERT INTO sync_server_results (url, result, attempted_at, session_count, error) VALUES (?, ?, ?, ?, ?) "
+            "ON CONFLICT(url) DO UPDATE SET result = excluded.result, attempted_at = excluded.attempted_at, "
+            "session_count = excluded.session_count, error = excluded.error",
+            (url, result, now.isoformat().replace("+00:00", "Z"), session_count, error),
+        )
+
+
+def last_sync_result(db_path: Path, url: str) -> dict[str, str | int | None] | None:
+    with connection(db_path) as database:
+        row = database.execute(
+            "SELECT result, attempted_at, session_count, error FROM sync_server_results WHERE url = ?",
+            (url,),
+        ).fetchone()
+    return dict(row) if row else None
+
+
 def pending_sessions(db_path: Path, server_id: str, batch_size: int = 100) -> list[dict]:
     with connection(db_path) as database:
         rows = database.execute(
@@ -143,6 +180,23 @@ def pending_sessions(db_path: Path, server_id: str, batch_size: int = 100) -> li
             (server_id, batch_size),
         ).fetchall()
     return [dict(row) for row in rows]
+
+
+def pending_session_count(db_path: Path, server_id: str | None) -> int:
+    with connection(db_path) as database:
+        if server_id is None:
+            row = database.execute(
+                "SELECT COUNT(*) AS count FROM sessions WHERE end_time IS NOT NULL AND session_uuid IS NOT NULL"
+            ).fetchone()
+        else:
+            row = database.execute(
+                "SELECT COUNT(*) AS count FROM sessions s LEFT JOIN session_sync sync "
+                "ON sync.session_uuid = s.session_uuid AND sync.server_id = ? "
+                "WHERE s.end_time IS NOT NULL AND s.session_uuid IS NOT NULL "
+                "AND (sync.status IS NULL OR sync.status != 'SYNCED')",
+                (server_id,),
+            ).fetchone()
+    return row["count"]
 
 
 def mark_synced(db_path: Path, server_id: str, session_uuids: list[str], now: datetime) -> None:

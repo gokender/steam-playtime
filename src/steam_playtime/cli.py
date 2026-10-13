@@ -5,6 +5,7 @@ import socket
 import threading
 import time
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import typer
@@ -59,6 +60,7 @@ def run_agent(configuration: Settings, log_path: Path | None = None) -> None:
     typer.echo(f"agent | started | device={configuration.device_name} | press Ctrl+C to stop")
     try:
         while True:
+            agent_storage.record_agent_heartbeat(configuration.agent_db, datetime.now(UTC), configuration.server_url)
             collect_once(configuration, log_path)
             synced = sync_once(configuration)
             if synced:
@@ -135,24 +137,53 @@ def all(
 
 @app.command()
 def status() -> None:
-    """Show the active local session and synchronization state."""
+    """Show local collection and synchronization state."""
     configuration = settings()
     with agent_storage.connection(configuration.agent_db) as database:
         session = database.execute(
             "SELECT game_name, start_time FROM sessions WHERE status = 'RUNNING' ORDER BY id DESC LIMIT 1"
         ).fetchone()
     if session is None:
-        typer.echo("No active local session.")
+        typer.echo("Current game: none")
     else:
-        typer.echo(f"{session['game_name']} — started {session['start_time']}")
-    show_sync_status(configuration)
+        typer.echo(f"Current game: {session['game_name']} — started {session['start_time']}")
+    show_agent_status(configuration)
+    server_url = synchronization_target_url(configuration)
+    show_pending_sessions(configuration, server_url)
+    show_sync_status(configuration, server_url)
 
 
-def show_sync_status(configuration: Settings) -> None:
-    if not configuration.server_url:
-        typer.echo("Synchronization: not configured.")
+def synchronization_target_url(configuration: Settings) -> str:
+    """Use the configured remote URL, or the target most recently used by the agent."""
+    return configuration.server_url or agent_storage.active_server_url(configuration.agent_db)
+
+
+def show_agent_status(configuration: Settings) -> None:
+    heartbeat = agent_storage.agent_heartbeat(configuration.agent_db)
+    if heartbeat is None:
+        typer.echo("Agent: never started")
         return
-    state = agent_storage.server_sync_status(configuration.agent_db, configuration.server_url)
+    heartbeat_at = datetime.fromisoformat(heartbeat.replace("Z", "+00:00"))
+    stale_after = timedelta(seconds=configuration.check_interval_seconds * 2)
+    state = "running" if heartbeat_at + stale_after >= datetime.now(UTC) else "unhealthy"
+    typer.echo(f"Agent: {state} | last heartbeat={heartbeat}")
+
+
+def show_pending_sessions(configuration: Settings, server_url: str) -> None:
+    if not server_url:
+        typer.echo("Pending sessions: not available (synchronization not configured)")
+        return
+    configured_server_id = agent_storage.server_id(configuration.agent_db, server_url)
+    pending = agent_storage.pending_session_count(configuration.agent_db, configured_server_id)
+    typer.echo(f"Pending sessions: {pending}")
+
+
+def show_sync_status(configuration: Settings, server_url: str) -> None:
+    if not server_url:
+        typer.echo("Synchronization: not configured.")
+        typer.echo("Last synchronization: not available (synchronization not configured)")
+        return
+    state = agent_storage.server_sync_status(configuration.agent_db, server_url)
     if state["suspended"]:
         typer.echo(
             f"Synchronization: suspended | failures={state['failure_count']} | error={state['last_error']} | "
@@ -165,17 +196,25 @@ def show_sync_status(configuration: Settings) -> None:
         )
     else:
         typer.echo(f"Synchronization: ready | failures={state['failure_count']}")
+    result = agent_storage.last_sync_result(configuration.agent_db, server_url)
+    if result is None:
+        typer.echo("Last synchronization: never")
+    elif result["result"] == "SUCCESS":
+        typer.echo(f"Last synchronization: success at {result['attempted_at']} | sessions={result['session_count']}")
+    else:
+        typer.echo(f"Last synchronization: failed at {result['attempted_at']} | error={result['error']}")
 
 
 @sync_app.command("reset")
 def reset_sync() -> None:
     """Resume synchronization after an HTTP error."""
     configuration = settings()
-    if not configuration.server_url:
+    server_url = synchronization_target_url(configuration)
+    if not server_url:
         typer.echo("Synchronization is not configured.", err=True)
         raise typer.Exit(1)
-    agent_storage.reset_server_sync(configuration.agent_db, configuration.server_url)
-    typer.echo(f"Synchronization reset for {configuration.server_url}.")
+    agent_storage.reset_server_sync(configuration.agent_db, server_url)
+    typer.echo(f"Synchronization reset for {server_url}.")
 
 
 @app.command()
