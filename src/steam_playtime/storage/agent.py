@@ -199,6 +199,34 @@ def pending_session_count(db_path: Path, server_id: str | None) -> int:
     return row["count"]
 
 
+def local_history(db_path: Path, device_name: str, limit: int) -> list[dict]:
+    with connection(db_path) as database:
+        rows = database.execute(
+            "SELECT start_time, game_name, duration_seconds FROM sessions "
+            "WHERE end_time IS NOT NULL ORDER BY start_time DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    return [{**dict(row), "device_name": device_name} for row in rows]
+
+
+def local_statistics(db_path: Path) -> list[dict]:
+    with connection(db_path) as database:
+        rows = database.execute(
+            "SELECT game_name, SUM(duration_seconds) AS duration FROM sessions "
+            "WHERE end_time IS NOT NULL GROUP BY game_name ORDER BY duration DESC"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def local_sessions_for_reporting(db_path: Path, device_name: str) -> list[dict]:
+    with connection(db_path) as database:
+        rows = database.execute(
+            "SELECT start_time, end_time, game_name FROM sessions "
+            "WHERE end_time IS NOT NULL ORDER BY start_time DESC"
+        ).fetchall()
+    return [{**dict(row), "device_name": device_name} for row in rows]
+
+
 def mark_synced(db_path: Path, server_id: str, session_uuids: list[str], now: datetime) -> None:
     with connection(db_path) as database:
         database.executemany(

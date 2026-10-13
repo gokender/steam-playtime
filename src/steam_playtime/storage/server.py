@@ -83,6 +83,24 @@ def history(db_path: Path, limit: int) -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def history_page(db_path: Path, limit: int, cursor: tuple[str, str] | None = None) -> list[sqlite3.Row]:
+    """Return a stable page ordered by start time, newest first."""
+    where = ""
+    parameters: list[str | int] = []
+    if cursor is not None:
+        where = "WHERE (s.start_time < ? OR (s.start_time = ? AND s.session_uuid < ?))"
+        parameters.extend((cursor[0], cursor[0], cursor[1]))
+    parameters.append(limit)
+    with connection(db_path) as database:
+        return database.execute(
+            "SELECT s.session_uuid, s.start_time, COALESCE(a.name, s.game_name_snapshot) AS game_name, d.device_name, "
+            "s.duration_seconds FROM sessions s JOIN devices d ON d.device_id = s.device_id "
+            "LEFT JOIN steam_apps a ON a.appid = CAST(s.appid AS INTEGER) "
+            f"{where} ORDER BY s.start_time DESC, s.session_uuid DESC LIMIT ?",
+            parameters,
+        ).fetchall()
+
+
 def statistics(db_path: Path) -> list[sqlite3.Row]:
     with connection(db_path) as database:
         return database.execute(
