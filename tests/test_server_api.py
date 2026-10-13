@@ -49,3 +49,38 @@ def test_sync_endpoint_requires_token_and_accepts_valid_payload(tmp_path):
 
     assert response.status_code == 200
     assert response.json() == {"status": "success", "processed": 1}
+
+
+def test_reporting_endpoints_are_authenticated_and_history_is_paginated(tmp_path):
+    client = TestClient(create_app(settings(tmp_path)))
+    headers = {"Authorization": "Bearer secret"}
+    first = payload()
+    second = payload()
+    second["sessions"][0]["session_uuid"] = "session-id-2"
+    second["sessions"][0]["appid"] = "43"
+    second["sessions"][0]["game_name"] = "Second Game"
+    second["sessions"][0]["start_time"] = "2026-01-01T11:00:00Z"
+
+    client.post("/api/v1/sessions", json=first, headers=headers)
+    client.post("/api/v1/sessions", json=second, headers=headers)
+
+    assert client.get("/api/v1/history").status_code == 401
+    page_one = client.get("/api/v1/history?limit=1", headers=headers)
+    assert page_one.status_code == 200
+    assert page_one.json()["sessions"] == [{
+        "start_time": "2026-01-01T11:00:00Z",
+        "game_name": "Second Game",
+        "device_name": "deck",
+        "duration_seconds": 60.0,
+    }]
+    assert "launch_command" not in page_one.json()["sessions"][0]
+
+    page_two = client.get("/api/v1/history", params={"limit": 1, "cursor": page_one.json()["next_cursor"]}, headers=headers)
+    assert page_two.status_code == 200
+    assert page_two.json()["sessions"][0]["game_name"] == "Example Game"
+
+    stats = client.get("/api/v1/stats", headers=headers)
+    assert {row["game_name"] for row in stats.json()["rows"]} == {"Example Game", "Second Game"}
+    daily = client.get("/api/v1/stats/daily", params={"timezone": "UTC"}, headers=headers)
+    assert daily.status_code == 200
+    assert daily.json()["totals"][0]["day"] == "2026-01-01"

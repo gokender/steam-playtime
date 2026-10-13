@@ -24,7 +24,9 @@ uv run steam-playtime agent     # collector for a remote Steam machine
 uv run steam-playtime status
 uv run steam-playtime sync reset # Resume after an HTTP error once corrected
 uv run steam-playtime history
+uv run steam-playtime history --local
 uv run steam-playtime stats
+uv run steam-playtime stats --local
 uv run steam-playtime stats --daily
 uv run steam-playtime stats --game "Hades"
 uv run steam-playtime stats --csv playtime.csv
@@ -57,6 +59,11 @@ The CSV columns are `day`, `game_name`, `device_name`, `duration_seconds`, and
 `duration`; `duration` uses `HH:MM:SS`, including total hours above 24. Game
 and device names are correctly CSV-escaped, including commas and quotes.
 Use `--game "NAME"` with `--csv` to export one game only.
+
+On a remote agent configured with `server.url`, `history` and `stats` read the
+central server through the authenticated API. Add `--local` to use only the
+completed sessions stored on that device, including sessions awaiting sync.
+CSV exports are always written to the machine running the command.
 
 ## Configuration
 

@@ -10,6 +10,7 @@ from pathlib import Path
 
 import typer
 import uvicorn
+import httpx
 
 from steam_playtime import __version__
 from steam_playtime.agent.collector import collect_once
@@ -217,12 +218,53 @@ def reset_sync() -> None:
     typer.echo(f"Synchronization reset for {server_url}.")
 
 
+def server_request(configuration: Settings, path: str, params: dict | None = None) -> dict:
+    """Fetch a report from the configured central server or fail explicitly."""
+    try:
+        with httpx.Client(timeout=10) as client:
+            response = client.get(
+                f"{configuration.server_url}{path}",
+                params=params,
+                headers={"Authorization": f"Bearer {configuration.api_token}"},
+            )
+            response.raise_for_status()
+            return response.json()
+    except (httpx.HTTPError, ValueError) as error:
+        typer.echo(f"Failed to retrieve server data: {error}", err=True)
+        raise typer.Exit(1) from error
+
+
+def remote_history(configuration: Settings, limit: int) -> list[dict]:
+    rows: list[dict] = []
+    cursor: str | None = None
+    while len(rows) < limit:
+        page_size = min(1000, limit - len(rows))
+        params: dict[str, int | str] = {"limit": page_size}
+        if cursor is not None:
+            params["cursor"] = cursor
+        payload = server_request(configuration, "/api/v1/history", params)
+        rows.extend(payload["sessions"])
+        cursor = payload["next_cursor"]
+        if cursor is None:
+            break
+    return rows
+
+
 @app.command()
-def history(limit: int = typer.Option(20, min=1, help="Maximum number of sessions to show.")) -> None:
-    """Show consolidated history from the local server database."""
-    rows = server_storage.history(settings().server_db, limit)
+def history(
+    limit: int = typer.Option(20, min=1, help="Maximum number of sessions to show."),
+    local: bool = typer.Option(False, "--local", help="Show only completed sessions stored on this agent."),
+) -> None:
+    """Show centralized history, or local completed sessions with --local."""
+    configuration = settings()
+    if local:
+        rows = agent_storage.local_history(configuration.agent_db, configuration.device_name, limit)
+    elif configuration.server_url:
+        rows = remote_history(configuration, limit)
+    else:
+        rows = server_storage.history(configuration.server_db, limit)
     if not rows:
-        typer.echo("No server sessions yet.")
+        typer.echo("No matching sessions yet.")
     for row in rows:
         typer.echo(
             f"{row['start_time']} | {row['game_name']} | {row['device_name']} | "
@@ -232,21 +274,56 @@ def history(limit: int = typer.Option(20, min=1, help="Maximum number of session
 
 @app.command()
 def stats(
+    local: bool = typer.Option(False, "--local", help="Use only completed sessions stored on this agent."),
     daily: bool = typer.Option(False, "--daily", help="Group playtime by local calendar day."),
     game: str | None = typer.Option(None, "--game", help="Show daily sessions for one game."),
     csv: Path | None = typer.Option(None, "--csv", help="Export daily game and device totals to a CSV file."),
 ) -> None:
-    """Show consolidated playtime totals from the local server database."""
+    """Show centralized playtime totals, or local totals with --local."""
     configuration = settings()
+    if local:
+        reporting_rows = agent_storage.local_sessions_for_reporting(configuration.agent_db, configuration.device_name)
+        statistics_rows = agent_storage.local_statistics(configuration.agent_db)
+    elif configuration.server_url:
+        if csv is not None:
+            totals = server_request(
+                configuration, "/api/v1/stats/csv", {"timezone": configuration.timezone, "game": game}
+            )["totals"]
+            write_daily_game_device_csv(csv, totals)
+            typer.echo(f"Exported {len(totals)} row(s) to {csv}.")
+            return
+        if daily or game:
+            totals = server_request(
+                configuration, "/api/v1/stats/daily", {"timezone": configuration.timezone, "game": game}
+            )["totals"]
+            if not totals:
+                typer.echo("No matching server sessions yet.")
+                return
+            for report in totals:
+                typer.echo(f"{report['day']} | {format_duration(report['duration'])} | {len(report['sessions'])} session(s)")
+                if game:
+                    for session in report["sessions"]:
+                        typer.echo(
+                            f"  {session['start']} → {session['end']} | {session['game_name']} | "
+                            f"{format_duration(session['duration'])}"
+                        )
+            return
+        rows = server_request(configuration, "/api/v1/stats")["rows"]
+        if not rows:
+            typer.echo("No server sessions yet.")
+        for row in rows:
+            typer.echo(f"{row['game_name']} | {format_duration(row['duration'])}")
+        return
+    else:
+        reporting_rows = server_storage.sessions_for_reporting(configuration.server_db)
+        statistics_rows = server_storage.statistics(configuration.server_db)
     if csv is not None:
-        totals = daily_game_device_totals(
-            server_storage.sessions_for_reporting(configuration.server_db), configuration.timezone, game
-        )
+        totals = daily_game_device_totals(reporting_rows, configuration.timezone, game)
         write_daily_game_device_csv(csv, totals)
         typer.echo(f"Exported {len(totals)} row(s) to {csv}.")
         return
     if daily or game:
-        totals = daily_totals(server_storage.sessions_for_reporting(configuration.server_db), configuration.timezone, game)
+        totals = daily_totals(reporting_rows, configuration.timezone, game)
         if not totals:
             typer.echo("No matching server sessions yet.")
             return
@@ -261,10 +338,9 @@ def stats(
                     )
         return
 
-    rows = server_storage.statistics(configuration.server_db)
-    if not rows:
-        typer.echo("No server sessions yet.")
-    for row in rows:
+    if not statistics_rows:
+        typer.echo("No matching sessions yet." if local else "No server sessions yet.")
+    for row in statistics_rows:
         typer.echo(f"{row['game_name']} | {format_duration(row['duration'])}")
 
 
