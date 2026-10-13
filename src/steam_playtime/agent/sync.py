@@ -44,6 +44,10 @@ def sync_once(settings: Settings, now: datetime | None = None) -> int:
             response.raise_for_status()
             if response.json().get("processed") != len(sessions):
                 raise ValueError("Server did not acknowledge every session.")
+    except httpx.HTTPStatusError as error:
+        storage.suspend_server(settings.agent_db, settings.server_url, str(error), current_time)
+        logger.warning("agent | synchronization_suspended | error=%s", error)
+        return 0
     except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
         storage.record_server_failure(settings.agent_db, settings.server_url, str(error), current_time)
         logger.warning("agent | synchronization_deferred | error=%s", error)
