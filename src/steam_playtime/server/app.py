@@ -2,6 +2,7 @@
 
 import base64
 import binascii
+import logging
 from typing import Literal
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, status
@@ -12,6 +13,8 @@ from steam_playtime.config import Settings
 from steam_playtime.reporting import daily_game_device_totals, daily_totals
 from steam_playtime.steam.catalog import resolve_app
 from steam_playtime.storage import server as storage
+
+logger = logging.getLogger(__name__)
 
 
 class SessionPayload(BaseModel):
@@ -67,7 +70,9 @@ def create_app(settings: Settings) -> FastAPI:
         try:
             storage.save_sessions(settings.server_db, payload.device_id, payload.device_name, sessions)
         except ValueError as error:
+            logger.warning("server | sessions_rejected | reason=device_name_already_in_use")
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        logger.info("server | sessions_ingested | device=%s | processed=%s", payload.device_name, len(sessions))
         for appid in storage.pending_appids(settings.server_db):
             background_tasks.add_task(resolve_app, settings.server_db, appid)
         return {"status": "success", "processed": len(sessions)}

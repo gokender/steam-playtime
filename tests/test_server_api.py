@@ -1,3 +1,5 @@
+import logging
+
 from fastapi.testclient import TestClient
 
 from steam_playtime.config import Settings
@@ -37,8 +39,9 @@ def payload() -> dict:
     }
 
 
-def test_sync_endpoint_requires_token_and_accepts_valid_payload(tmp_path):
+def test_sync_endpoint_requires_token_and_accepts_valid_payload(tmp_path, caplog):
     client = TestClient(create_app(settings(tmp_path)))
+    caplog.set_level(logging.INFO, logger="steam_playtime.server.app")
 
     assert client.post("/api/v1/sessions", json=payload()).status_code == 401
     info = client.get("/api/v1/info", headers={"Authorization": "Bearer secret"})
@@ -49,6 +52,7 @@ def test_sync_endpoint_requires_token_and_accepts_valid_payload(tmp_path):
 
     assert response.status_code == 200
     assert response.json() == {"status": "success", "processed": 1}
+    assert "server | sessions_ingested | device=deck | processed=1" in caplog.messages
 
 
 def test_reporting_endpoints_are_authenticated_and_history_is_paginated(tmp_path):

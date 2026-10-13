@@ -82,6 +82,7 @@ def bind_server_socket(configuration: Settings) -> socket.socket:
 
 
 def run_server(configuration: Settings, listener: socket.socket | None = None) -> None:
+    configure_logging()
     typer.echo(f"server | started | http://{configuration.server_host}:{configuration.server_port}")
     server = uvicorn.Server(
         uvicorn.Config(
