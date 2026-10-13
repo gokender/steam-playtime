@@ -146,8 +146,12 @@ def test_history_and_stats_can_use_completed_local_sessions(tmp_path, monkeypatc
 
     history = CliRunner().invoke(cli.app, ["history", "--local"])
     stats = CliRunner().invoke(cli.app, ["stats", "--local"])
+    daily = CliRunner().invoke(cli.app, ["stats", "--local", "--daily"])
 
     assert history.exit_code == 0
     assert "Local Game | my-device | 00:01:30" in history.output
     assert stats.exit_code == 0
     assert "Local Game | 00:01:30" in stats.output
+    assert daily.exit_code == 0
+    assert "2026-01-01 | 00:01:30 | 1 session(s)" in daily.output
+    assert "  Local Game | 00:01:30 | 1 session(s)" in daily.output

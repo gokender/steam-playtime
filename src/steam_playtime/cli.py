@@ -276,7 +276,7 @@ def history(
 def stats(
     local: bool = typer.Option(False, "--local", help="Use only completed sessions stored on this agent."),
     daily: bool = typer.Option(False, "--daily", help="Group playtime by local calendar day."),
-    game: str | None = typer.Option(None, "--game", help="Show daily sessions for one game."),
+    game: str | None = typer.Option(None, "--game", help="Show daily totals for one game."),
     csv: Path | None = typer.Option(None, "--csv", help="Export daily game and device totals to a CSV file."),
 ) -> None:
     """Show centralized playtime totals, or local totals with --local."""
@@ -300,12 +300,12 @@ def stats(
                 typer.echo("No matching server sessions yet.")
                 return
             for report in totals:
-                typer.echo(f"{report['day']} | {format_duration(report['duration'])} | {len(report['sessions'])} session(s)")
-                if game:
-                    for session in report["sessions"]:
+                typer.echo(f"{report['day']} | {format_duration(report['duration'])} | {report['session_count']} session(s)")
+                if not game:
+                    for game_total in report["games"]:
                         typer.echo(
-                            f"  {session['start']} → {session['end']} | {session['game_name']} | "
-                            f"{format_duration(session['duration'])}"
+                            f"  {game_total['game_name']} | {format_duration(game_total['duration'])} | "
+                            f"{game_total['session_count']} session(s)"
                         )
             return
         rows = server_request(configuration, "/api/v1/stats")["rows"]
@@ -329,12 +329,12 @@ def stats(
             return
         for day in sorted(totals, reverse=True):
             report = totals[day]
-            typer.echo(f"{day} | {format_duration(report['duration'])} | {len(report['sessions'])} session(s)")
-            if game:
-                for session in report["sessions"]:
+            typer.echo(f"{day} | {format_duration(report['duration'])} | {report['session_count']} session(s)")
+            if not game:
+                for game_total in report["games"]:
                     typer.echo(
-                        f"  {session['start']} → {session['end']} | {session['game_name']} | "
-                        f"{format_duration(session['duration'])}"
+                        f"  {game_total['game_name']} | {format_duration(game_total['duration'])} | "
+                        f"{game_total['session_count']} session(s)"
                     )
         return
 

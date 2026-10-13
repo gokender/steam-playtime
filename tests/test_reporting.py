@@ -22,13 +22,23 @@ def test_session_crossing_midnight_is_split_in_reporting_timezone():
     ]
 
 
-def test_daily_totals_include_session_details():
-    rows = [{"game_name": "Example", "start_time": "2026-01-01T10:00:00Z", "end_time": "2026-01-01T11:00:00Z"}]
+def test_daily_totals_merge_games_and_sort_by_duration():
+    rows = [
+        {"game_name": "Example", "start_time": "2026-01-01T10:00:00Z", "end_time": "2026-01-01T11:00:00Z"},
+        {"game_name": "Other", "start_time": "2026-01-01T11:00:00Z", "end_time": "2026-01-01T11:30:00Z"},
+        {"game_name": "Example", "start_time": "2026-01-01T12:00:00Z", "end_time": "2026-01-01T12:15:00Z"},
+    ]
 
-    totals = daily_totals(rows, "UTC", "Example")
+    totals = daily_totals(rows, "UTC")
 
-    assert totals["2026-01-01"]["duration"] == 3600
-    assert totals["2026-01-01"]["sessions"][0]["start"] == "10:00:00"
+    assert totals["2026-01-01"] == {
+        "duration": 6300.0,
+        "session_count": 3,
+        "games": [
+            {"game_name": "Example", "duration": 4500.0, "session_count": 2},
+            {"game_name": "Other", "duration": 1800.0, "session_count": 1},
+        ],
+    }
 
 
 def test_daily_game_device_totals_split_and_group_by_game_and_device():

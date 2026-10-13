@@ -35,22 +35,28 @@ def split_session_by_day(start_time: str, end_time: str, timezone: str) -> list[
 
 
 def daily_totals(rows, timezone: str, game_name: str | None = None) -> dict[str, dict]:
-    """Return daily duration and contributing sessions, optionally for one game."""
-    totals: dict[str, dict] = defaultdict(lambda: {"duration": 0.0, "sessions": []})
+    """Return daily totals with games merged across sessions and devices."""
+    totals: dict[str, dict] = defaultdict(lambda: {"duration": 0.0, "session_count": 0, "games": {}})
     for row in rows:
         if game_name and row["game_name"].casefold() != game_name.casefold():
             continue
-        for day, duration, segment_start, segment_end in split_session_by_day(row["start_time"], row["end_time"], timezone):
+        for day, duration, _, _ in split_session_by_day(row["start_time"], row["end_time"], timezone):
             totals[day]["duration"] += duration
-            totals[day]["sessions"].append(
-                {
-                    "game_name": row["game_name"],
-                    "duration": duration,
-                    "start": segment_start.strftime("%H:%M:%S"),
-                    "end": segment_end.strftime("%H:%M:%S"),
-                }
-            )
-    return dict(totals)
+            totals[day]["session_count"] += 1
+            game = totals[day]["games"].setdefault(row["game_name"], {"duration": 0.0, "session_count": 0})
+            game["duration"] += duration
+            game["session_count"] += 1
+    return {
+        day: {
+            "duration": total["duration"],
+            "session_count": total["session_count"],
+            "games": [
+                {"game_name": name, **game}
+                for name, game in sorted(total["games"].items(), key=lambda item: (-item[1]["duration"], item[0].casefold()))
+            ],
+        }
+        for day, total in totals.items()
+    }
 
 
 def daily_game_device_totals(rows, timezone: str, game_name: str | None = None) -> list[dict]:
