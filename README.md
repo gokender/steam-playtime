@@ -22,6 +22,7 @@ uv run steam-playtime all       # local server and collector
 uv run steam-playtime server    # central server only
 uv run steam-playtime agent     # collector for a remote Steam machine
 uv run steam-playtime status
+uv run steam-playtime sync reset # Resume after an HTTP error once corrected
 uv run steam-playtime history
 uv run steam-playtime stats
 uv run steam-playtime stats --daily
@@ -37,6 +38,13 @@ both roles.
 Synchronization acknowledgements are tracked per server identity. Changing
 `server.url` to a new server sends completed local sessions to that server once,
 without resending sessions already acknowledged by a previously used server.
+Network failures retry with an exponential delay capped at one hour. An HTTP
+error from the server (for example an invalid token, bad URL, or server error)
+suspends automatic synchronization until `steam-playtime sync reset` is run.
+`status` reports the current game, agent heartbeat, sessions pending for the
+configured server, synchronization state, and the most recent synchronization
+result. After `all` has run, it also reports against that local server even
+though `server.url` remains empty in the configuration file.
 `all` exits before starting the agent if its local server port is unavailable;
 use `--port` to override it temporarily.
 
